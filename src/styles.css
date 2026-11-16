@@ -1103,6 +1103,12 @@ progress {
 }
 
 @media (max-width: 720px) {
+  /* A backdrop-filter would make the header the containing block of the fixed tab bar. */
+  .topbar {
+    background: var(--bg);
+    backdrop-filter: none;
+  }
+
   .topbar .wrap {
     min-height: 56px;
   }

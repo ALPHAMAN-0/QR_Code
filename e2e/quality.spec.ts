@@ -28,6 +28,17 @@ test.describe('Layout', () => {
     })
   }
 
+  test('on phones the section tabs sit at the bottom of the screen and leave the header visible', async ({ page, isMobile }) => {
+    test.skip(!isMobile, 'the bottom tab bar is a phone layout')
+    await page.goto('./')
+    const viewport = page.viewportSize()!
+    const tabs = (await page.getByRole('tablist').boundingBox())!
+    expect(Math.round(tabs.y + tabs.height)).toBe(viewport.height)
+    await expect(page.locator('.brand')).toBeInViewport()
+    const brand = (await page.locator('.brand').boundingBox())!
+    expect(brand.y + brand.height).toBeLessThanOrEqual(tabs.y)
+  })
+
   test('the skip link is the first thing keyboard users reach', async ({ page, isMobile }) => {
     test.skip(isMobile, 'keyboard navigation is a desktop concern')
     await page.goto('./')
