@@ -40,7 +40,7 @@ describe('review fix: deceptive links are flagged', () => {
 describe('review fix: Wi-Fi passwords are never stored in history', () => {
   it('redacts the password field and keeps the rest', () => {
     expect(redactSecrets('WIFI:T:WPA;S:Home;P:hunter2;H:true;;')).toBe('WIFI:T:WPA;S:Home;P:;H:true;;')
-    expect(redactSecrets('WIFI:S:x;P:a\;b;;')).toBe('WIFI:S:x;P:;;')
+    expect(redactSecrets(String.raw`WIFI:S:x;P:a\;b;;`)).toBe('WIFI:S:x;P:;;')
     expect(redactSecrets('hello P:secret')).toBe('hello P:secret')
   })
 

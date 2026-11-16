@@ -30,7 +30,7 @@ export function HistoryPanel({ entries, enabled, onToggle, onRemove, onClear, on
     <section aria-labelledby="history-title">
       <div className="panel-head">
         <h1 id="history-title">History</h1>
-        <p>Saved only in this browser on this device. Wi-Fi passwords you encode are saved too, so switch it off on shared devices.</p>
+        <p>Saved only in this browser on this device. Wi-Fi passwords are never saved. Switch history off on shared devices.</p>
       </div>
 
       <div className="history-tools">

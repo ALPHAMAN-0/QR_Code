@@ -29,6 +29,9 @@ export function ScanPanel({ onScanned, notify }: Props) {
     [onScanned],
   )
 
+  const onCameraFound = useCallback((codes: DecodedCode[]) => report(codes, 'camera'), [report])
+  const onImageDecoded = useCallback((codes: DecodedCode[]) => report(codes, 'image'), [report])
+
   return (
     <section aria-labelledby="scan-title">
       <div className="panel-head">
@@ -37,8 +40,8 @@ export function ScanPanel({ onScanned, notify }: Props) {
       </div>
       <div className="scan">
         <div className="stack">
-          <Camera onFound={(codes) => report(codes, 'camera')} notify={notify} />
-          <ImageInput onDecoded={(codes) => report(codes, 'image')} />
+          <Camera onFound={onCameraFound} notify={notify} />
+          <ImageInput onDecoded={onImageDecoded} />
         </div>
         <div className="stack" aria-live="polite">
           {results === null ? (
@@ -63,14 +66,37 @@ export function ScanPanel({ onScanned, notify }: Props) {
   )
 }
 
+const CAMERA_MESSAGES: Record<CameraState, string> = {
+  idle: 'Point your camera at a QR code or barcode.',
+  starting: 'Starting the camera…',
+  running: 'Camera on. Scanning.',
+  found: 'Got it. Point at another code to scan again.',
+  denied: 'Camera permission is blocked. Allow it in your browser’s site settings, or scan an image instead.',
+  unavailable: 'No camera found. Scan an image instead.',
+  error: 'The camera could not start. It may be in use by another app.',
+}
+
+const MAX_IMAGE_BYTES = 30 * 1024 * 1024
+
 function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; notify: (m: string) => void }) {
+  const viewfinderRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const startRef = useRef<HTMLButtonElement>(null)
+  const stopRef = useRef<HTMLButtonElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  // Every start/stop bumps this, so a camera stream that arrives late (after Stop, a switch or unmount) is released.
+  const requestRef = useRef(0)
+  const onFoundRef = useRef(onFound)
   const [state, setState] = useState<CameraState>('idle')
   const [facing, setFacing] = useState<'environment' | 'user'>('environment')
   const [canFlip, setCanFlip] = useState(false)
 
+  useEffect(() => {
+    onFoundRef.current = onFound
+  }, [onFound])
+
   const stop = useCallback(() => {
+    requestRef.current++
     streamRef.current?.getTracks().forEach((track) => track.stop())
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
@@ -79,6 +105,7 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
   const start = useCallback(
     async (mode: 'environment' | 'user') => {
       stop()
+      const request = ++requestRef.current
       if (!navigator.mediaDevices?.getUserMedia) {
         setState('unavailable')
         return
@@ -89,6 +116,10 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
           video: { facingMode: { ideal: mode }, width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         })
+        if (request !== requestRef.current) {
+          stream.getTracks().forEach((track) => track.stop())
+          return
+        }
         streamRef.current = stream
         const video = videoRef.current
         if (video) {
@@ -96,9 +127,11 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
           await video.play().catch(() => undefined)
         }
         const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [])
+        if (request !== requestRef.current) return
         setCanFlip(devices.filter((d) => d.kind === 'videoinput').length > 1)
         setState('running')
       } catch (error) {
+        if (request !== requestRef.current) return
         const name = error instanceof DOMException ? error.name : ''
         setState(name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : name === 'NotFoundError' ? 'unavailable' : 'error')
       }
@@ -119,8 +152,9 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
           const { decodeImage, pixelsFrom } = await loadScanner()
           const codes = await decodeImage(pixelsFrom(video, video.videoWidth, video.videoHeight, 960), { fast: true })
           if (!cancelled && codes.length > 0) {
+            stop()
             setState('found')
-            onFound(codes)
+            onFoundRef.current(codes)
             return
           }
         } catch {
@@ -134,15 +168,14 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
       cancelled = true
       clearTimeout(timer)
     }
-  }, [state, onFound])
+  }, [state, stop])
 
-  // Release the camera when the tab is hidden or the panel closes.
+  // Release the camera when the page is hidden or the panel closes.
   useEffect(() => {
     const onHide = () => {
-      if (document.hidden && streamRef.current) {
-        stop()
-        setState('idle')
-      }
+      if (!document.hidden) return
+      stop()
+      setState((s) => (s === 'running' || s === 'starting' ? 'idle' : s))
     }
     document.addEventListener('visibilitychange', onHide)
     return () => {
@@ -151,32 +184,27 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
     }
   }, [stop])
 
+  // Keep keyboard focus on the camera controls when buttons swap in and out.
   useEffect(() => {
-    if (state === 'found') stop()
-  }, [state, stop])
+    const active = document.activeElement
+    if (active && active !== document.body && !viewfinderRef.current?.contains(active)) return
+    if (state === 'running') stopRef.current?.focus()
+    else if (state !== 'starting') startRef.current?.focus()
+  }, [state])
 
   const live = state === 'running' || state === 'starting'
 
   return (
-    <div className="viewfinder marks">
+    <div className="viewfinder marks" ref={viewfinderRef}>
       <span className="marks-b" aria-hidden="true" />
       <video ref={videoRef} muted playsInline aria-label="Camera preview" hidden={!live} />
       {state === 'running' && <div className="scanline" aria-hidden="true" />}
       {!live && (
         <div className="viewfinder-idle">
           <Icon name="camera" className="big" />
-          <p>
-            {state === 'denied'
-              ? 'Camera permission is blocked. Allow it in your browser’s site settings, or scan an image instead.'
-              : state === 'unavailable'
-                ? 'No camera found. Scan an image instead.'
-                : state === 'error'
-                  ? 'The camera could not start. It may be in use by another app.'
-                  : state === 'found'
-                    ? 'Got it. Point at another code to scan again.'
-                    : 'Point your camera at a QR code or barcode.'}
-          </p>
-          <button type="button" className="btn btn-primary" onClick={() => void start(facing)}>
+          {/* Read out by the live region below; hidden here so it isn't heard twice. */}
+          <p aria-hidden="true">{CAMERA_MESSAGES[state]}</p>
+          <button ref={startRef} type="button" className="btn btn-primary" onClick={() => void start(facing)}>
             <Icon name="camera" /> {state === 'found' ? 'Scan again' : 'Start camera'}
           </button>
         </div>
@@ -187,6 +215,7 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
             <button
               type="button"
               className="btn"
+              disabled={state === 'starting'}
               onClick={() => {
                 const next = facing === 'environment' ? 'user' : 'environment'
                 setFacing(next)
@@ -197,6 +226,7 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
             </button>
           )}
           <button
+            ref={stopRef}
             type="button"
             className="btn"
             onClick={() => {
@@ -210,7 +240,7 @@ function Camera({ onFound, notify }: { onFound: (codes: DecodedCode[]) => void; 
         </div>
       )}
       <p className="sr-only" aria-live="polite">
-        {state === 'running' ? 'Camera on. Scanning.' : state === 'found' ? 'Code found.' : ''}
+        {CAMERA_MESSAGES[state]}
       </p>
     </div>
   )
@@ -221,6 +251,8 @@ function ImageInput({ onDecoded }: { onDecoded: (codes: DecodedCode[]) => void }
   const [preview, setPreview] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [working, setWorking] = useState(false)
+  // Only the most recent image may report results, even if an earlier one finishes later.
+  const latestRef = useRef(0)
   const inputId = 'scan-file'
 
   const readFile = useCallback(
@@ -231,21 +263,27 @@ function ImageInput({ onDecoded }: { onDecoded: (codes: DecodedCode[]) => void }
         setError('That file is not an image. Use PNG, JPEG, WebP, GIF or a screenshot.')
         return
       }
+      if (file.size > MAX_IMAGE_BYTES) {
+        setError('That image is larger than 30 MB. Use a smaller picture or a screenshot.')
+        return
+      }
+      const request = ++latestRef.current
       setWorking(true)
-      setPreview((old) => {
-        if (old) URL.revokeObjectURL(old)
-        return URL.createObjectURL(file)
-      })
+      setPreview(URL.createObjectURL(file))
       try {
         const { decodeImage, pixelsFrom } = await loadScanner()
         const bitmap = await createImageBitmap(file)
-        const codes = await decodeImage(pixelsFrom(bitmap, bitmap.width, bitmap.height, 2400))
-        bitmap.close()
-        onDecoded(codes)
+        let codes: DecodedCode[]
+        try {
+          codes = await decodeImage(pixelsFrom(bitmap, bitmap.width, bitmap.height, 2400))
+        } finally {
+          bitmap.close()
+        }
+        if (request === latestRef.current) onDecoded(codes)
       } catch {
-        setError('That image could not be read. Try another file.')
+        if (request === latestRef.current) setError('That image could not be read. Try another file.')
       } finally {
-        setWorking(false)
+        if (request === latestRef.current) setWorking(false)
       }
     },
     [onDecoded],
@@ -264,9 +302,13 @@ function ImageInput({ onDecoded }: { onDecoded: (codes: DecodedCode[]) => void }
     return () => document.removeEventListener('paste', onPaste)
   }, [readFile])
 
-  useEffect(() => () => {
-    if (preview) URL.revokeObjectURL(preview)
-  }, [preview])
+  // Free the previous preview whenever it changes or the panel closes.
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview)
+    },
+    [preview],
+  )
 
   const pasteFromClipboard = async () => {
     try {

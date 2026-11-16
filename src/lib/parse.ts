@@ -23,10 +23,59 @@ export type ParsedContent =
   | { kind: 'phone'; number: string }
   | { kind: 'sms'; number: string; message: string }
   | { kind: 'location'; latitude: number; longitude: number }
-  | { kind: 'event'; title: string; location: string; description: string; start: string; end: string }
+  | {
+      kind: 'event'
+      title: string
+      location: string
+      description: string
+      /** Human-readable, e.g. `2026-11-20 18:30`. */
+      start: string
+      end: string
+      /** Validated iCalendar values (`20261120T183000`, `20261120T183000Z` or `20261120`), or ''. */
+      dtstart: string
+      dtend: string
+    }
   | { kind: 'text'; text: string }
 
 const SAFE_LINK = /^(https?:\/\/|mailto:|tel:|sms:)/i
+
+export interface LinkWarning {
+  id: 'insecure' | 'userinfo' | 'punycode'
+  message: string
+}
+
+/** Signs that a link is not what it looks like. */
+export function linkWarnings(href: string): LinkWarning[] {
+  let url: URL
+  try {
+    url = new URL(href)
+  } catch {
+    return []
+  }
+  const warnings: LinkWarning[] = []
+  if (url.username || url.password) {
+    warnings.push({
+      id: 'userinfo',
+      message: `This link hides its destination: it really goes to ${url.hostname}, not to the name before the “@”.`,
+    })
+  }
+  if (url.hostname.split('.').some((label) => label.startsWith('xn--'))) {
+    warnings.push({ id: 'punycode', message: 'The address uses look-alike characters. Check it carefully before opening.' })
+  }
+  if (url.protocol === 'http:') {
+    warnings.push({ id: 'insecure', message: 'This link isn’t encrypted (http). Only open it if you trust where the code came from.' })
+  }
+  return warnings
+}
+
+/** decodeURIComponent that returns the input instead of throwing on malformed escapes. */
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
 
 /** True only for link schemes that cannot run script (http, https, mailto, tel, sms). */
 export function isSafeLink(href: string): boolean {
@@ -177,7 +226,7 @@ function parseMailto(text: string): ParsedContent {
   const params = new URLSearchParams(query.replace(/\+/g, '%2B'))
   return {
     kind: 'email',
-    to: decodeURIComponent(address),
+    to: safeDecode(address),
     subject: params.get('subject') ?? '',
     body: params.get('body') ?? '',
   }
@@ -200,13 +249,19 @@ function readableIcsDate(value: string): string {
 }
 
 function parseEvent(text: string): ParsedContent {
-  const event = { kind: 'event' as const, title: '', location: '', description: '', start: '', end: '' }
+  const event = { kind: 'event' as const, title: '', location: '', description: '', start: '', end: '', dtstart: '', dtend: '' }
+  const ics = (value: string) => (/^\d{8}(T\d{6}Z?)?$/.test(value) ? value : '')
   for (const { name, value } of contentLines(text)) {
     if (name === 'SUMMARY') event.title = unescapeVcard(value)
     else if (name === 'LOCATION') event.location = unescapeVcard(value)
     else if (name === 'DESCRIPTION') event.description = unescapeVcard(value)
-    else if (name === 'DTSTART') event.start = readableIcsDate(value)
-    else if (name === 'DTEND') event.end = readableIcsDate(value)
+    else if (name === 'DTSTART') {
+      event.start = readableIcsDate(value)
+      event.dtstart = ics(value)
+    } else if (name === 'DTEND') {
+      event.end = readableIcsDate(value)
+      event.dtend = ics(value)
+    }
   }
   return event
 }

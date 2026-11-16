@@ -5,6 +5,7 @@ import type { ReadBack } from '../../lib/readback.ts'
 import { verifyReadBack } from '../../lib/readback.ts'
 import { canCopyImage, canShareFiles, copyImage, copyText, downloadBlob, fileStem, printPage, shareFile } from '../../lib/files.ts'
 import type { NewHistoryEntry } from '../../lib/history.ts'
+import { parseContent } from '../../lib/parse.ts'
 import { buildPayload, type ContentType } from '../../lib/payloads.ts'
 import { renderCanvas, renderPng, renderSvg, svgSize, type RenderSpec } from '../../lib/render.ts'
 import { CATEGORIES, getSymbology, POPULAR_IDS, SYMBOLOGIES } from '../../lib/symbologies.ts'
@@ -51,7 +52,13 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
     setHandledNonce(request.nonce)
     const target = getSymbology(request.symbology) ?? getSymbology('qrcode')!
     setSymbologyId(target.id)
-    if (target.freeText) {
+    setStyle((s) => ({ ...s, margin: null, showText: null }))
+    const wifi = /^WIFI:/i.test(request.text) ? parseContent(request.text) : null
+    if (target.freeText && wifi?.kind === 'wifi') {
+      // History never keeps Wi-Fi passwords, so reopen the form for the user to type it again.
+      setContentType('wifi')
+      setContent((c) => ({ ...c, wifi: { type: 'wifi', ssid: wifi.ssid, password: wifi.password, security: wifi.security, hidden: wifi.hidden } }))
+    } else if (target.freeText) {
       setContentType('text')
       setContent((c) => ({ ...c, text: { type: 'text', text: request.text } }))
     } else {
@@ -74,24 +81,26 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
   }, [symbology, content, contentType, rawValues])
 
   const payload = useDeferredValue(input.payload)
+  // Dragging a color picker or slider fires many changes; let React skip stale renders.
+  const deferredStyle = useDeferredValue(style)
 
   const rendered = useMemo((): Rendered | null => {
     if (payload === null) return null
     const base: RenderSpec = {
       symbology: symbology.id,
       text: payload,
-      foreground: style.foreground,
-      background: style.background,
-      transparent: style.transparent,
+      foreground: deferredStyle.foreground,
+      background: deferredStyle.background,
+      transparent: deferredStyle.transparent,
       scale: 1,
-      margin: style.margin ?? defaultMargin,
-      eclevel: style.eclevel,
-      showText: style.showText ?? symbology.showsText,
-      logo: symbology.logo && style.logo ? style.logo : undefined,
+      margin: deferredStyle.margin ?? defaultMargin,
+      eclevel: deferredStyle.eclevel,
+      showText: deferredStyle.showText ?? symbology.showsText,
+      logo: symbology.logo && deferredStyle.logo ? deferredStyle.logo : undefined,
     }
     try {
       const natural = svgSize(renderSvg({ ...base, logo: undefined }))
-      const scale = Math.max(1, Math.floor(style.size / Math.max(natural.width, natural.height, 1)))
+      const scale = Math.max(1, Math.floor(deferredStyle.size / Math.max(natural.width, natural.height, 1)))
       const spec = { ...base, scale }
       const svg = renderSvg(spec)
       const { width, height } = svgSize(svg)
@@ -99,7 +108,7 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
-  }, [payload, symbology, style, defaultMargin])
+  }, [payload, symbology, deferredStyle, defaultMargin])
 
   // Read the finished code back with the scanner, so the user knows it works before printing it.
   const readable = Boolean(symbology.decoderFormat)
@@ -287,11 +296,10 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
           </details>
 
         <div className="create-preview">
-          <div className="stage marks" aria-live="polite">
+          <div className="stage marks">
             <span className="marks-b" aria-hidden="true" />
             {imageSrc && rendered?.ok ? (
               <img
-                key={imageSrc.length}
                 className={`stage-img${style.transparent ? ' is-transparent' : ''}`}
                 src={imageSrc}
                 width={rendered.width}
@@ -312,7 +320,10 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
                 </span>
                 <span>{rendered.payload.length} chars</span>
               </div>
-              <CheckLine check={check} />
+              {check?.status === 'checking' && <CheckLine check={check} />}
+              <div aria-live="polite" aria-atomic="true">
+                {check && check.status !== 'checking' && <CheckLine check={check} />}
+              </div>
               {warnings.map((w) => (
                 <p key={w.id} className="status status-warn">
                   <Icon name="alert" /> {w.message}

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Icon } from '../../components/Icon.tsx'
 import type { DecodedCode } from '../../lib/readback.ts'
 import { copyText, downloadText } from '../../lib/files.ts'
-import { isSafeLink, parseContent, type ParsedContent } from '../../lib/parse.ts'
+import { isSafeLink, linkWarnings, parseContent, type ParsedContent } from '../../lib/parse.ts'
 
 interface Props {
   code: DecodedCode
@@ -24,11 +24,11 @@ const KIND_LABEL: Record<ParsedContent['kind'], string> = {
 /** Only digits and a leading + survive into tel:/sms: links. */
 const dialable = (number: string) => number.replace(/[^\d+]/g, '').replace(/(?!^)\+/g, '')
 
-function SafeLink({ href, children }: { href: string; children: ReactNode }) {
+function SafeLink({ href, children, quiet = false }: { href: string; children: ReactNode; quiet?: boolean }) {
   if (!isSafeLink(href)) return null
   const external = /^https?:/i.test(href)
   return (
-    <a className="btn btn-primary" href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
+    <a className={quiet ? 'btn' : 'btn btn-primary'} href={href} {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>
       {children}
     </a>
   )
@@ -63,7 +63,7 @@ export function ResultCard({ code, notify }: Props) {
 
       <div className="btn-row">
         {parsed.kind === 'url' && (
-          <SafeLink href={parsed.url}>
+          <SafeLink href={parsed.url} quiet={linkWarnings(parsed.url).some((w) => w.id !== 'insecure')}>
             <Icon name="external" /> Open link
           </SafeLink>
         )}
@@ -81,7 +81,7 @@ export function ResultCard({ code, notify }: Props) {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => downloadText(toVcard(code.text, parsed), `${(parsed.name || 'contact').replace(/[^\w-]+/g, '-')}.vcf`, 'text/vcard')}
+            onClick={() => downloadText(toVcard(parsed), `${(parsed.name || 'contact').replace(/[^\w-]+/g, '-')}.vcf`, 'text/vcard')}
           >
             <Icon name="download" /> Save contact
           </button>
@@ -114,7 +114,7 @@ export function ResultCard({ code, notify }: Props) {
           <button
             type="button"
             className="btn btn-primary"
-            onClick={() => downloadText(toCalendar(code.text), `${(parsed.title || 'event').replace(/[^\w-]+/g, '-')}.ics`, 'text/calendar')}
+            onClick={() => downloadText(toCalendar(parsed), `${(parsed.title || 'event').replace(/[^\w-]+/g, '-')}.ics`, 'text/calendar')}
           >
             <Icon name="calendar" /> Add to calendar
           </button>
@@ -140,11 +140,15 @@ function Details({ parsed, showPassword }: { parsed: ParsedContent; showPassword
       return (
         <>
           <pre className="result-text">{parsed.url}</pre>
-          {!parsed.secure && (
-            <p className="status status-warn">
-              <Icon name="alert" /> This link isn’t encrypted (http). Only open it if you trust where the code came from.
+          <dl className="facts">
+            <dt>Opens</dt>
+            <dd className="mono">{new URL(parsed.url).hostname}</dd>
+          </dl>
+          {linkWarnings(parsed.url).map((warning) => (
+            <p key={warning.id} className="status status-warn">
+              <Icon name="alert" /> {warning.message}
             </p>
-          )}
+          ))}
         </>
       )
     case 'wifi':
@@ -197,22 +201,39 @@ function Details({ parsed, showPassword }: { parsed: ParsedContent; showPassword
   )
 }
 
-function toVcard(raw: string, parsed: Extract<ParsedContent, { kind: 'contact' }>): string {
-  if (/^BEGIN:VCARD/i.test(raw.trim())) return raw
-  const esc = (v: string) => v.replace(/([\\,;])/g, '\\$1').replace(/\r?\n/g, '\\n')
-  const lines = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${esc(parsed.name || parsed.organization || 'Contact')}`]
-  if (parsed.organization) lines.push(`ORG:${esc(parsed.organization)}`)
-  parsed.phones.forEach((p) => lines.push(`TEL:${esc(p)}`))
-  parsed.emails.forEach((e) => lines.push(`EMAIL:${esc(e)}`))
-  parsed.urls.forEach((u) => lines.push(`URL:${esc(u)}`))
-  if (parsed.address) lines.push(`ADR:;;${esc(parsed.address)};;;;`)
-  if (parsed.note) lines.push(`NOTE:${esc(parsed.note)}`)
+const escapeText = (value: string) => value.replace(/([\\,;])/g, '\\$1').replace(/\r?\n/g, '\\n')
+
+/** Rebuilt from parsed fields only, so a crafted code cannot smuggle extra properties into the file. */
+function toVcard(parsed: Extract<ParsedContent, { kind: 'contact' }>): string {
+  const lines = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${escapeText(parsed.name || parsed.organization || 'Contact')}`]
+  if (parsed.organization) lines.push(`ORG:${escapeText(parsed.organization)}`)
+  if (parsed.title) lines.push(`TITLE:${escapeText(parsed.title)}`)
+  parsed.phones.forEach((p) => lines.push(`TEL:${escapeText(p)}`))
+  parsed.emails.forEach((e) => lines.push(`EMAIL:${escapeText(e)}`))
+  parsed.urls.filter(isSafeLink).forEach((u) => lines.push(`URL:${escapeText(u)}`))
+  if (parsed.address) lines.push(`ADR:;;${escapeText(parsed.address)};;;;`)
+  if (parsed.note) lines.push(`NOTE:${escapeText(parsed.note)}`)
   lines.push('END:VCARD')
   return lines.join('\r\n')
 }
 
-function toCalendar(raw: string): string {
-  const text = raw.trim()
-  if (/^BEGIN:VCALENDAR/i.test(text)) return text
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//QR Studio//EN', text.replace(/\r?\n/g, '\r\n'), 'END:VCALENDAR'].join('\r\n')
+/** Rebuilt from parsed, validated fields only (no alarms, attendees or other extras). */
+function toCalendar(parsed: Extract<ParsedContent, { kind: 'event' }>): string {
+  const date = (name: string, value: string) => (/^\d{8}$/.test(value) ? `${name};VALUE=DATE:${value}` : `${name}:${value}`)
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//QR Studio//EN',
+    'BEGIN:VEVENT',
+    `UID:${stamp}-${Math.random().toString(36).slice(2)}@qr-studio`,
+    `DTSTAMP:${stamp}`,
+    `SUMMARY:${escapeText(parsed.title || 'Event')}`,
+  ]
+  if (parsed.dtstart) lines.push(date('DTSTART', parsed.dtstart))
+  if (parsed.dtend) lines.push(date('DTEND', parsed.dtend))
+  if (parsed.location) lines.push(`LOCATION:${escapeText(parsed.location)}`)
+  if (parsed.description) lines.push(`DESCRIPTION:${escapeText(parsed.description)}`)
+  lines.push('END:VEVENT', 'END:VCALENDAR')
+  return lines.join('\r\n')
 }

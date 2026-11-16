@@ -50,6 +50,8 @@ export async function generateBatch(
   const files: ZipEntry[] = []
   const errors: BatchError[] = []
   for (const [index, value] of values.entries()) {
+    // Give the browser a turn now and then so progress paints during long, synchronous batches.
+    if (index > 0 && index % 20 === 0) await new Promise((resolve) => setTimeout(resolve, 0))
     try {
       files.push({ name: batchFileName(index, value, extension, values.length), data: await render(value) })
     } catch (error) {

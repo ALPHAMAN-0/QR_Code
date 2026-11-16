@@ -110,6 +110,8 @@ describe('parseContent', () => {
       description: 'Bring cake',
       start: '2026-11-20 18:30',
       end: '2026-11-20 21:00',
+      dtstart: '20261120T183000',
+      dtend: '20261120T210000',
     })
   })
 

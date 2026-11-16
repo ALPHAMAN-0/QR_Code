@@ -110,7 +110,7 @@ export function BatchPanel({ notify }: { notify: (message: string) => void }) {
           </button>
         </div>
 
-        <div className="stack" aria-live="polite">
+        <div className="stack">
           {progress === null ? (
             <p className="empty">Paste a list of links, product numbers or IDs, and every code lands in one ZIP file.</p>
           ) : (
@@ -119,11 +119,13 @@ export function BatchPanel({ notify }: { notify: (message: string) => void }) {
                 {running ? `Making code ${progress.done + 1} of ${progress.total}` : 'Done'}
               </label>
               <progress id="batch-progress" max={progress.total || 1} value={progress.done} />
-              {summary && (
-                <p className={`status ${errors.length ? 'status-warn' : 'status-ok'}`}>
-                  <Icon name={errors.length ? 'alert' : 'check'} /> {summary}
-                </p>
-              )}
+              <div aria-live="polite">
+                {summary && (
+                  <p className={`status ${errors.length ? 'status-warn' : 'status-ok'}`}>
+                    <Icon name={errors.length ? 'alert' : 'check'} /> {summary}
+                  </p>
+                )}
+              </div>
               {errors.length > 0 && (
                 <ul className="error-list">
                   {errors.map((e) => (

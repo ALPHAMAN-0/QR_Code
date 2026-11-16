@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { ErrorBoundary } from './components/ErrorBoundary.tsx'
 import { Icon, type IconName } from './components/Icon.tsx'
 import { BatchPanel } from './features/batch/BatchPanel.tsx'
 import { CreatePanel, type CreateRequest } from './features/create/CreatePanel.tsx'
@@ -24,9 +25,11 @@ const TABS: ReadonlyArray<{ id: TabId; label: string; icon: IconName }> = [
   { id: 'history', label: 'History', icon: 'history' },
 ]
 
+const isTab = (value: string): value is TabId => TABS.some((t) => t.id === value)
+
 function tabFromHash(): TabId {
   const hash = typeof location === 'undefined' ? '' : location.hash.slice(1)
-  return TABS.some((t) => t.id === hash) ? (hash as TabId) : 'create'
+  return isTab(hash) ? hash : 'create'
 }
 
 interface InstallPromptEvent extends Event {
@@ -39,7 +42,7 @@ export function App() {
   const [history, setHistory] = useState<HistoryEntry[]>(() => loadHistory())
   const [historyOn, setHistoryOn] = useState(() => isHistoryEnabled())
   const [request, setRequest] = useState<CreateRequest>()
-  const [toast, setToast] = useState('')
+  const [toast, setToast] = useState<{ id: number; message: string } | null>(null)
   const [installEvent, setInstallEvent] = useState<InstallPromptEvent | null>(null)
   const tabRefs = useRef<Record<TabId, HTMLButtonElement | null>>({ create: null, scan: null, batch: null, history: null })
 
@@ -51,7 +54,11 @@ export function App() {
   }, [])
 
   useEffect(() => {
-    const onHash = () => setTab(tabFromHash())
+    // Only section hashes switch sections; other anchors (like the skip link) are ignored.
+    const onHash = () => {
+      const hash = location.hash.slice(1)
+      if (isTab(hash)) setTab(hash)
+    }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
@@ -72,11 +79,12 @@ export function App() {
 
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => setToast(''), 2600)
+    const timer = setTimeout(() => setToast(null), 2600)
     return () => clearTimeout(timer)
   }, [toast])
 
-  const notify = useCallback((message: string) => setToast(message), [])
+  // A fresh id re-announces and re-times identical messages (e.g. saving twice).
+  const notify = useCallback((message: string) => setToast({ id: Date.now() + Math.random(), message }), [])
   const record = useCallback((entry: NewHistoryEntry) => setHistory(addHistory(entry)), [])
 
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
@@ -94,7 +102,14 @@ export function App() {
 
   return (
     <>
-      <a className="skip-link" href="#main">
+      <a
+        className="skip-link"
+        href="#main"
+        onClick={(event) => {
+          event.preventDefault()
+          document.getElementById('main')?.focus()
+        }}
+      >
         Skip to content
       </a>
       <header className="topbar">
@@ -103,8 +118,7 @@ export function App() {
             <Icon name="mark" className="brand-mark" />
             <span>QR Studio</span>
           </div>
-          <nav aria-label="Sections">
-            <div className="tabs" role="tablist" aria-label="QR Studio sections">
+          <div className="tabs" role="tablist" aria-label="QR Studio sections">
               {TABS.map((t, index) => (
                 <button
                   key={t.id}
@@ -125,16 +139,20 @@ export function App() {
                   {t.label}
                 </button>
               ))}
-            </div>
-          </nav>
+          </div>
           {installEvent && (
             <button
               type="button"
               className="btn install"
               onClick={async () => {
-                await installEvent.prompt()
-                await installEvent.userChoice
-                setInstallEvent(null)
+                try {
+                  await installEvent.prompt()
+                  await installEvent.userChoice
+                } catch {
+                  // The browser already used this prompt; it will offer installation itself.
+                } finally {
+                  setInstallEvent(null)
+                }
               }}
             >
               <Icon name="install" /> Install app
@@ -147,16 +165,25 @@ export function App() {
         <div className="wrap">
           {/* Create and Batch stay mounted so work in progress survives switching sections. */}
           <div role="tabpanel" id="panel-create" aria-labelledby="tab-create" hidden={tab !== 'create'}>
-            <CreatePanel request={request} onCreated={record} notify={notify} />
+            <ErrorBoundary section="Create">
+              <CreatePanel request={request} onCreated={record} notify={notify} />
+            </ErrorBoundary>
           </div>
           <div role="tabpanel" id="panel-scan" aria-labelledby="tab-scan" hidden={tab !== 'scan'}>
-            {tab === 'scan' && <ScanPanel onScanned={record} notify={notify} />}
+            {tab === 'scan' && (
+              <ErrorBoundary section="Scan">
+                <ScanPanel onScanned={record} notify={notify} />
+              </ErrorBoundary>
+            )}
           </div>
           <div role="tabpanel" id="panel-batch" aria-labelledby="tab-batch" hidden={tab !== 'batch'}>
-            <BatchPanel notify={notify} />
+            <ErrorBoundary section="Batch">
+              <BatchPanel notify={notify} />
+            </ErrorBoundary>
           </div>
           <div role="tabpanel" id="panel-history" aria-labelledby="tab-history" hidden={tab !== 'history'}>
             {tab === 'history' && (
+              <ErrorBoundary section="History">
               <HistoryPanel
                 entries={history}
                 enabled={historyOn}
@@ -176,6 +203,7 @@ export function App() {
                   select('create')
                 }}
               />
+              </ErrorBoundary>
             )}
           </div>
         </div>
@@ -193,7 +221,7 @@ export function App() {
       </footer>
 
       <div className="toast" role="status" aria-live="polite">
-        {toast}
+        {toast && <span key={toast.id}>{toast.message}</span>}
       </div>
     </>
   )

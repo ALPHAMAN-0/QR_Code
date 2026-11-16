@@ -72,14 +72,13 @@ describe('ResultCard structured content', () => {
     expect(type).toBe('text/vcard')
   })
 
-  it('keeps an original vCard when saving', async () => {
+  it('keeps name, organization and title when saving a vCard', async () => {
     const files = await import('../../lib/files.ts')
     const save = vi.spyOn(files, 'downloadText').mockImplementation(() => undefined)
     const user = userEvent.setup()
-    const vcard = 'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada\r\nORG:Engines\r\nTITLE:CTO\r\nEND:VCARD'
-    show(vcard)
+    show('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada\r\nORG:Engines\r\nTITLE:CTO\r\nEND:VCARD')
     await user.click(screen.getByRole('button', { name: /Save contact/ }))
-    expect(save.mock.calls[0]![0]).toBe(vcard)
+    expect(save.mock.calls[0]![0]).toBe(['BEGIN:VCARD', 'VERSION:3.0', 'FN:Ada', 'ORG:Engines', 'TITLE:CTO', 'END:VCARD'].join('\r\n'))
   })
 
   it('writes emails and texts with encoded content', () => {

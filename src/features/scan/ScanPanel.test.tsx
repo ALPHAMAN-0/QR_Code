@@ -98,14 +98,14 @@ describe('camera', () => {
     mockCamera(() => Promise.reject(new DOMException('no', 'NotAllowedError')))
     const { user } = setup()
     await user.click(screen.getByRole('button', { name: /Start camera/ }))
-    expect(await screen.findByText(/Camera permission is blocked/)).toBeVisible()
+    expect(await screen.findByText(/Camera permission is blocked/, { selector: '.viewfinder-idle p' })).toBeVisible()
   })
 
   it('explains a missing camera', async () => {
     mockCamera(() => Promise.reject(new DOMException('no', 'NotFoundError')))
     const { user } = setup()
     await user.click(screen.getByRole('button', { name: /Start camera/ }))
-    expect(await screen.findByText(/No camera found/)).toBeVisible()
+    expect(await screen.findByText(/No camera found/, { selector: '.viewfinder-idle p' })).toBeVisible()
   })
 
   it('scans frames, stops the camera on a hit and shows the result', async () => {
