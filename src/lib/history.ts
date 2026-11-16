@@ -1,0 +1,112 @@
+/** Recent codes, kept only in this browser's localStorage. */
+
+export interface HistoryEntry {
+  id: string
+  kind: 'created' | 'scanned'
+  /** Human-readable format, e.g. "QR Code". */
+  format: string
+  /** bwip-js id for created codes, so they can be re-opened in the editor. */
+  symbology?: string
+  text: string
+  createdAt: number
+}
+
+export type NewHistoryEntry = Omit<HistoryEntry, 'id' | 'createdAt'>
+
+export interface KeyValueStorage {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+  removeItem(key: string): void
+}
+
+export const HISTORY_LIMIT = 100
+const KEY = 'qr-studio:history:v1'
+const ENABLED_KEY = 'qr-studio:history-enabled:v1'
+
+function browserStorage(): KeyValueStorage | undefined {
+  try {
+    return globalThis.localStorage
+  } catch {
+    return undefined
+  }
+}
+
+function isEntry(value: unknown): value is HistoryEntry {
+  if (typeof value !== 'object' || value === null) return false
+  const v = value as Record<string, unknown>
+  return (
+    typeof v.id === 'string' &&
+    (v.kind === 'created' || v.kind === 'scanned') &&
+    typeof v.format === 'string' &&
+    typeof v.text === 'string' &&
+    typeof v.createdAt === 'number' &&
+    (v.symbology === undefined || typeof v.symbology === 'string')
+  )
+}
+
+export function loadHistory(storage = browserStorage()): HistoryEntry[] {
+  try {
+    const raw = storage?.getItem(KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(isEntry) : []
+  } catch {
+    return []
+  }
+}
+
+function save(entries: HistoryEntry[], storage: KeyValueStorage | undefined): void {
+  try {
+    storage?.setItem(KEY, JSON.stringify(entries))
+  } catch {
+    // Storage full or blocked: history simply isn't persisted.
+  }
+}
+
+let counter = 0
+function newId(now: number): string {
+  counter = (counter + 1) % 1_000_000
+  const random = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)
+  return `${now.toString(36)}-${counter}-${random}`
+}
+
+export function addHistory(entry: NewHistoryEntry, storage = browserStorage(), now = Date.now()): HistoryEntry[] {
+  if (!isHistoryEnabled(storage)) return []
+  const rest = loadHistory(storage).filter(
+    (e) => !(e.kind === entry.kind && e.text === entry.text && e.format === entry.format && e.symbology === entry.symbology),
+  )
+  const next = [{ ...entry, id: newId(now), createdAt: now }, ...rest].slice(0, HISTORY_LIMIT)
+  save(next, storage)
+  return next
+}
+
+export function removeHistory(id: string, storage = browserStorage()): HistoryEntry[] {
+  const next = loadHistory(storage).filter((e) => e.id !== id)
+  save(next, storage)
+  return next
+}
+
+export function clearHistory(storage = browserStorage()): void {
+  try {
+    storage?.removeItem(KEY)
+  } catch {
+    // Nothing to clear.
+  }
+}
+
+export function isHistoryEnabled(storage = browserStorage()): boolean {
+  try {
+    return storage?.getItem(ENABLED_KEY) !== 'false'
+  } catch {
+    return true
+  }
+}
+
+export function setHistoryEnabled(enabled: boolean, storage = browserStorage()): void {
+  try {
+    storage?.setItem(ENABLED_KEY, String(enabled))
+  } catch {
+    // Preference can't be stored; default (enabled) applies next time.
+  }
+  if (!enabled) clearHistory(storage)
+}
