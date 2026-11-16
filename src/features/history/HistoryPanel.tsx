@@ -28,6 +28,7 @@ export function HistoryPanel({ entries, enabled, onToggle, onRemove, onClear, on
 
   return (
     <section aria-labelledby="history-title">
+      <div className="wrap">
       <div className="panel-head">
         <h1 id="history-title">History</h1>
         <p>Saved only in this browser on this device. Wi-Fi passwords are never saved. Switch history off on shared devices.</p>
@@ -106,6 +107,7 @@ export function HistoryPanel({ entries, enabled, onToggle, onRemove, onClear, on
           ))}
         </ul>
       )}
+    </div>
     </section>
   )
 }

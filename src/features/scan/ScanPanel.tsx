@@ -34,6 +34,7 @@ export function ScanPanel({ onScanned, notify }: Props) {
 
   return (
     <section aria-labelledby="scan-title">
+      <div className="wrap">
       <div className="panel-head">
         <h1 id="scan-title">Scan any code</h1>
         <p>QR, Data Matrix, Aztec, PDF417, MaxiCode, EAN/UPC, Code 128 and every other common format.</p>
@@ -62,6 +63,7 @@ export function ScanPanel({ onScanned, notify }: Props) {
           )}
         </div>
       </div>
+    </div>
     </section>
   )
 }

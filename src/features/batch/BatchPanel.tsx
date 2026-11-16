@@ -48,6 +48,7 @@ export function BatchPanel({ notify }: { notify: (message: string) => void }) {
 
   return (
     <section aria-labelledby="batch-title">
+      <div className="wrap">
       <div className="panel-head">
         <h1 id="batch-title">Make many codes at once</h1>
         <p>One value per line, up to {BATCH_LIMIT}. You get a ZIP of images.</p>
@@ -139,6 +140,7 @@ export function BatchPanel({ notify }: { notify: (message: string) => void }) {
           )}
         </div>
       </div>
+    </div>
     </section>
   )
 }

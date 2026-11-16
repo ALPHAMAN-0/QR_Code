@@ -202,6 +202,7 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
 
   return (
     <section aria-labelledby="create-title">
+      <div className="wrap">
       <div className="panel-head">
         <h1 id="create-title">Make a QR code or barcode</h1>
         <p>{SYMBOLOGIES.length} formats. Everything is drawn on your device.</p>
@@ -364,6 +365,7 @@ export function CreatePanel({ request, onCreated, notify }: Props) {
           )}
         </div>
       </div>
+    </div>
     </section>
   )
 }

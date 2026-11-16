@@ -162,7 +162,6 @@ export function App() {
       </header>
 
       <main id="main" tabIndex={-1}>
-        <div className="wrap">
           {/* Create and Batch stay mounted so work in progress survives switching sections. */}
           <div role="tabpanel" id="panel-create" aria-labelledby="tab-create" hidden={tab !== 'create'}>
             <ErrorBoundary section="Create">
@@ -206,17 +205,16 @@ export function App() {
               </ErrorBoundary>
             )}
           </div>
-        </div>
       </main>
 
       <footer className="footer">
         <div className="wrap">
-          <span>Runs on your device. Nothing you make or scan is uploaded.</span>
-          <span>
+          <p>
+            Runs on your device. Nothing you make or scan is uploaded.{' '}
             <a href="https://github.com/ALPHAMAN-0/QR_Code" target="_blank" rel="noopener noreferrer">
               Source on GitHub
             </a>
-          </span>
+          </p>
         </div>
       </footer>
 
