@@ -78,6 +78,6 @@ npm run lint && npm run typecheck && npm run coverage && npm run build && npm ru
 | Supply chain (repos had a worm in 2026) | Medium | Exact pins, `--before` age cutoff, `npm ci --ignore-scripts`, Actions pinned by SHA |
 
 ## Acceptance
-- [ ] All tasks complete
-- [ ] Validation passes
-- [ ] Every generated code that the decoder supports reads back identically
+- [x] All tasks complete
+- [x] Validation passes
+- [x] Every generated code that the decoder supports reads back identically

@@ -57,10 +57,10 @@ scanner and by a standard phone camera app, for every supported format**.
 ## Delivery Milestones
 | # | Milestone | Outcome | Status | Plan |
 |---|---|---|---|---|
-| 1 | Generate | User makes any supported QR/barcode, styles it, downloads/shares it | in-progress | .claude/plans/qr-studio.plan.md |
-| 2 | Scan | User reads any supported code from camera, file, drop or paste and acts on it | in-progress | .claude/plans/qr-studio.plan.md |
-| 3 | History + batch | User revisits recent codes and generates many at once | in-progress | .claude/plans/qr-studio.plan.md |
-| 4 | Ship | Installable, offline, live on a public URL, accessible | in-progress | .claude/plans/qr-studio.plan.md |
+| 1 | Generate | User makes any supported QR/barcode, styles it, downloads/shares it | complete | .claude/plans/qr-studio.plan.md |
+| 2 | Scan | User reads any supported code from camera, file, drop or paste and acts on it | complete | .claude/plans/qr-studio.plan.md |
+| 3 | History + batch | User revisits recent codes and generates many at once | complete | .claude/plans/qr-studio.plan.md |
+| 4 | Ship | Installable, offline, live on a public URL, accessible | complete | .claude/plans/qr-studio.plan.md |
 
 ## Open Questions
 - [ ] Should a custom domain be used instead of the default GitHub Pages address? (TBD — owner decision)
@@ -75,4 +75,4 @@ scanner and by a standard phone camera app, for every supported format**.
 | Some barcode formats need strict input (lengths, check digits) | High | Low | Per-format validation and helpful error text |
 
 ---
-*Status: DRAFT — requirements only. Implementation planning via /plan.*
+*Status: v1.0 delivered. Plan: `.claude/plans/qr-studio.plan.md`; evidence: `.claude/tdd/qr-studio.tdd.md`.*
