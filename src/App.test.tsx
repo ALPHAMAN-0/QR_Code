@@ -128,3 +128,14 @@ describe('History', () => {
     expect(localStorage.getItem('qr-studio:history-enabled:v1')).toBe('false')
   })
 })
+
+describe('review fix: skip link', () => {
+  it('moves to the content without changing the open section', async () => {
+    const user = userEvent.setup()
+    window.history.replaceState(null, '', '/#history')
+    render(<App />)
+    await user.click(screen.getByRole('link', { name: 'Skip to content' }))
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(screen.getByRole('tab', { name: 'History' })).toHaveAttribute('aria-selected', 'true')
+  })
+})

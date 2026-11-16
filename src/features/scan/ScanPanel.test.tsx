@@ -134,3 +134,39 @@ describe('camera', () => {
     expect(notify).toHaveBeenCalledWith('Camera stopped')
   })
 })
+
+describe('review fix: camera is always released', () => {
+  it('stops a stream that arrives after the panel closed', async () => {
+    const stopTrack = vi.fn()
+    let resolve!: (stream: unknown) => void
+    mockCamera(() => new Promise((r) => (resolve = r)))
+    const user = userEvent.setup()
+    const { unmount } = render(<ScanPanel onScanned={vi.fn()} notify={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /Start camera/ }))
+    unmount()
+    await act(async () => resolve({ getTracks: () => [{ stop: stopTrack }] }))
+    expect(stopTrack).toHaveBeenCalled()
+  })
+
+  it('stops a stream that arrives after the user pressed Stop', async () => {
+    const stopTrack = vi.fn()
+    let resolve!: (stream: unknown) => void
+    mockCamera(() => new Promise((r) => (resolve = r)))
+    const user = userEvent.setup()
+    render(<ScanPanel onScanned={vi.fn()} notify={vi.fn()} />)
+    await user.click(screen.getByRole('button', { name: /Start camera/ }))
+    await user.click(screen.getByRole('button', { name: /Stop/ }))
+    await act(async () => resolve({ getTracks: () => [{ stop: stopTrack }] }))
+    expect(stopTrack).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /Start camera/ })).toBeVisible()
+  })
+
+  it('refuses very large images', async () => {
+    const user = userEvent.setup()
+    render(<ScanPanel onScanned={vi.fn()} notify={vi.fn()} />)
+    const huge = new File([new Uint8Array(31 * 1024 * 1024)], 'huge.png', { type: 'image/png' })
+    await user.upload(screen.getByLabelText(/Choose image/), huge)
+    expect(await screen.findByText(/larger than 30 MB/)).toBeVisible()
+    expect(decodeImage).not.toHaveBeenCalled()
+  })
+})

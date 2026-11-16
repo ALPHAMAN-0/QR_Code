@@ -11,3 +11,4 @@ test-results/
 .DS_Store
 .vite/
 .taste-skill/
+e2e/.fixtures/

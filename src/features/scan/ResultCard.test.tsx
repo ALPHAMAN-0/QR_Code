@@ -130,3 +130,34 @@ describe('ResultCard structured content', () => {
     expect(screen.getByText('Raw data')).toBeVisible()
   })
 })
+
+describe('review fix: hardened results', () => {
+  it('shows where a link really goes and warns about user-info tricks', () => {
+    show('https://paypal.com@evil.example/login')
+    expect(screen.getByText('evil.example')).toBeVisible()
+    expect(screen.getByText(/really goes to/i)).toBeVisible()
+  })
+
+  it('rebuilds calendar files from the parsed event so extra fields are dropped', async () => {
+    const files = await import('../../lib/files.ts')
+    const save = vi.spyOn(files, 'downloadText').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    show('BEGIN:VEVENT\nSUMMARY:Launch\nDTSTART:20261120T183000\nATTENDEE:mailto:evil@example.com\nBEGIN:VALARM\nACTION:DISPLAY\nEND:VALARM\nEND:VEVENT')
+    await user.click(screen.getByRole('button', { name: /Add to calendar/ }))
+    const ics = save.mock.calls[0]![0] as string
+    expect(ics).toContain('SUMMARY:Launch')
+    expect(ics).toContain('DTSTART:20261120T183000')
+    expect(ics).not.toMatch(/ATTENDEE|VALARM/)
+  })
+
+  it('rebuilds contact files from the parsed fields', async () => {
+    const files = await import('../../lib/files.ts')
+    const save = vi.spyOn(files, 'downloadText').mockImplementation(() => undefined)
+    const user = userEvent.setup()
+    show('BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada\r\nX-EVIL:payload\r\nPHOTO;VALUE=URI:https://tracker.example/p.png\r\nEND:VCARD')
+    await user.click(screen.getByRole('button', { name: /Save contact/ }))
+    const vcf = save.mock.calls[0]![0] as string
+    expect(vcf).toContain('FN:Ada')
+    expect(vcf).not.toMatch(/X-EVIL|PHOTO|tracker/)
+  })
+})
