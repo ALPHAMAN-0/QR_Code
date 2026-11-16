@@ -77,12 +77,16 @@ export default defineConfig({
   build: {
     target: 'es2022',
     sourcemap: false,
+    // bwip-js carries the full Barcode Writer in Pure PostScript (all 111 symbologies) in one module.
+    chunkSizeWarningLimit: 1400,
   },
   test: {
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
     setupFiles: ['src/test/setup.ts'],
     restoreMocks: true,
+    // UI tests type into many fields; coverage instrumentation slows them down.
+    testTimeout: 20_000,
     coverage: {
       provider: 'v8',
       include: ['src/**/*.{ts,tsx}'],
