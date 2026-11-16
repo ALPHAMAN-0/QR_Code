@@ -34,8 +34,10 @@ describe('ResultCard', () => {
     show('WIFI:T:WPA;S:Cafe;P:hunter2;;')
     expect(screen.getByText('Cafe')).toBeVisible()
     expect(screen.queryByText('hunter2')).toBeNull()
+    expect(screen.getByText('WIFI:T:WPA;S:Cafe;P:••••••;;')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /Show password/ }))
     expect(screen.getByText('hunter2')).toBeVisible()
+    expect(screen.getByText('WIFI:T:WPA;S:Cafe;P:hunter2;;')).toBeInTheDocument()
   })
 
   it('builds call and text links only from digits', () => {

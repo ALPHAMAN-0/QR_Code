@@ -25,6 +25,8 @@ test.describe('Create', () => {
 
   test('every quick format draws and passes the read-back check', async ({ page }) => {
     await page.goto('./')
+    // 2D formats reuse the link; linear formats start from their own example value.
+    await page.getByLabel('Web address').fill('example.com')
     for (const name of ['Data Matrix', 'Aztec Code', 'PDF417', 'EAN-13', 'UPC-A', 'Code 128', 'Code 39']) {
       await page.getByRole('radio', { name, exact: true }).check()
       await expect(page.getByRole('img', { name: new RegExp(`^${name} for:`) })).toBeVisible()

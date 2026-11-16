@@ -1,6 +1,4 @@
-import '@fontsource-variable/epilogue/wght.css'
-import '@fontsource/jetbrains-mono/latin-400.css'
-import '@fontsource/jetbrains-mono/latin-500.css'
+import './fonts.css'
 import './styles.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'

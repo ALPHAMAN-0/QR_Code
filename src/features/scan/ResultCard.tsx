@@ -124,7 +124,9 @@ export function ResultCard({ code, notify }: Props) {
       {parsed.kind !== 'text' && (
         <details className="disclosure">
           <summary>Raw data</summary>
-          <pre className="result-text">{code.text}</pre>
+          <pre className="result-text">
+            {parsed.kind === 'wifi' && !showPassword ? code.text.replace(/(^WIFI:|;)P:(?:\\.|[^;\\])*/i, '$1P:••••••') : code.text}
+          </pre>
         </details>
       )}
     </article>
